@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Map Game</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        #map {
+            height: 100vh; /* Full screen map */
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <!-- Leaflet Library -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+    <!-- Game Script -->
+    <script>
+        // Initialize the map and set the view to a specific location
+        const map = L.map('map').setView([51.505, -0.09], 13);
+
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        // Player Icon
+        const playerIcon = L.icon({
+            iconUrl: 'https://leafletjs.com/examples/custom-icons/leaf-green.png', // Example icon
+            iconSize: [38, 38],
+            iconAnchor: [22, 22]
+        });
+
+        // Add Player Marker
+        const playerMarker = L.marker([51.505, -0.09], { icon: playerIcon }).addTo(map);
+
+        // Function to Add a Target Marker
+        function addTarget(lat, lng) {
+            const targetIcon = L.icon({
+                iconUrl: 'https://leafletjs.com/examples/custom-icons/leaf-red.png', // Example icon
+                iconSize: [38, 38],
+                iconAnchor: [22, 22]
+            });
+
+            const targetMarker = L.marker([lat, lng], { icon: targetIcon }).addTo(map);
+            return targetMarker;
+        }
+
+        // Initialize a target on the map
+        let target = addTarget(51.505, -0.1);
+
+        // Player Movement and Controls
+        document.addEventListener('keydown', (event) => {
+            const { lat, lng } = playerMarker.getLatLng();
+            const step = 0.001; // Adjust step size for faster/slower movement
+
+            switch (event.key) {
+                case 'ArrowUp':
+                    playerMarker.setLatLng([lat + step, lng]);
+                    break;
+                case 'ArrowDown':
+                    playerMarker.setLatLng([lat - step, lng]);
+                    break;
+                case 'ArrowLeft':
+                    playerMarker.setLatLng([lat, lng - step]);
+                    break;
+                case 'ArrowRight':
+                    playerMarker.setLatLng([lat, lng + step]);
+                    break;
+            }
+
+            // Check collision with target after moving
+            checkCollision();
+        });
+
+        // Check for Collision between Player and Target
+        function checkCollision() {
+            const playerPosition = playerMarker.getLatLng();
+            const targetPosition = target.getLatLng();
+
+            const distance = map.distance(playerPosition, targetPosition);
+            if (distance < 20) { // Collision threshold in meters
+                alert('You reached the target!');
+
+                // Remove the old target
+                map.removeLayer(target);
+
+                // Place a new target at a random location within bounds
+                const newLat = playerPosition.lat + (Math.random() - 0.5) * 0.02;
+                const newLng = playerPosition.lng + (Math.random() - 0.5) * 0.02;
+                target = addTarget(newLat, newLng);
+            }
+        }
+    </script>
+</body>
+</html>
