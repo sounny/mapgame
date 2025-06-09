@@ -3,97 +3,96 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>2D Map Game</title>
+    <title>World Map Quiz</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
-        #map {
-            height: 100vh; /* Full screen map */
+        body { margin: 0; }
+        #map { height: calc(100vh - 80px); }
+        #info {
+            padding: 10px;
+            background: #f0f0f0;
         }
+        #question { font-size: 1.2em; margin-bottom: 5px; }
     </style>
 </head>
 <body>
+    <div id="info">
+        <div id="question">Click start to begin!</div>
+        <div>Score: <span id="score">0</span></div>
+        <button id="startButton">Start Game</button>
+    </div>
     <div id="map"></div>
-    
-    <!-- Leaflet Library -->
+
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
-    <!-- Game Script -->
     <script>
-        // Initialize the map and set the view to a specific location
-        const map = L.map('map').setView([51.505, -0.09], 13);
+        const map = L.map('map').setView([20, 0], 2);
 
-        // Add OpenStreetMap tiles
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
+            maxZoom: 5,
             attribution: '© OpenStreetMap'
         }).addTo(map);
 
-        // Player Icon
-        const playerIcon = L.icon({
-            iconUrl: 'https://leafletjs.com/examples/custom-icons/leaf-green.png', // Example icon
-            iconSize: [38, 38],
-            iconAnchor: [22, 22]
-        });
+        const countries = [
+            { name: 'United States', lat: 38.9, lng: -77.0 },
+            { name: 'Brazil', lat: -15.78, lng: -47.93 },
+            { name: 'France', lat: 48.85, lng: 2.35 },
+            { name: 'India', lat: 28.61, lng: 77.21 },
+            { name: 'Japan', lat: 35.68, lng: 139.69 },
+            { name: 'Australia', lat: -35.28, lng: 149.13 },
+            { name: 'South Africa', lat: -25.73, lng: 28.18 },
+            { name: 'Canada', lat: 45.42, lng: -75.69 },
+            { name: 'Russia', lat: 55.75, lng: 37.62 },
+            { name: 'Egypt', lat: 30.04, lng: 31.24 }
+        ];
 
-        // Add Player Marker
-        const playerMarker = L.marker([51.505, -0.09], { icon: playerIcon }).addTo(map);
+        let score = 0;
+        let round = 0;
+        const totalRounds = 5;
+        let targetCountry = null;
+        let lastMarker = null;
 
-        // Function to Add a Target Marker
-        function addTarget(lat, lng) {
-            const targetIcon = L.icon({
-                iconUrl: 'https://leafletjs.com/examples/custom-icons/leaf-red.png', // Example icon
-                iconSize: [38, 38],
-                iconAnchor: [22, 22]
-            });
+        const scoreEl = document.getElementById('score');
+        const questionEl = document.getElementById('question');
+        document.getElementById('startButton').addEventListener('click', startGame);
 
-            const targetMarker = L.marker([lat, lng], { icon: targetIcon }).addTo(map);
-            return targetMarker;
+        function startGame() {
+            score = 0;
+            round = 0;
+            scoreEl.textContent = score;
+            if (lastMarker) {
+                map.removeLayer(lastMarker);
+                lastMarker = null;
+            }
+            nextRound();
         }
 
-        // Initialize a target on the map
-        let target = addTarget(51.505, -0.1);
-
-        // Player Movement and Controls
-        document.addEventListener('keydown', (event) => {
-            const { lat, lng } = playerMarker.getLatLng();
-            const step = 0.001; // Adjust step size for faster/slower movement
-
-            switch (event.key) {
-                case 'ArrowUp':
-                    playerMarker.setLatLng([lat + step, lng]);
-                    break;
-                case 'ArrowDown':
-                    playerMarker.setLatLng([lat - step, lng]);
-                    break;
-                case 'ArrowLeft':
-                    playerMarker.setLatLng([lat, lng - step]);
-                    break;
-                case 'ArrowRight':
-                    playerMarker.setLatLng([lat, lng + step]);
-                    break;
+        function nextRound() {
+            if (round >= totalRounds) {
+                questionEl.textContent = `Game over! Final score: ${score}`;
+                return;
             }
+            targetCountry = countries[Math.floor(Math.random() * countries.length)];
+            questionEl.textContent = `Where is ${targetCountry.name}? Click on the map!`;
+            round++;
+            map.once('click', handleGuess);
+        }
 
-            // Check collision with target after moving
-            checkCollision();
-        });
+        function handleGuess(e) {
+            const guessLatLng = e.latlng;
+            const targetLatLng = L.latLng(targetCountry.lat, targetCountry.lng);
+            const distanceKm = map.distance(guessLatLng, targetLatLng) / 1000;
+            const roundScore = Math.max(0, Math.round(1000 - distanceKm));
+            score += roundScore;
+            scoreEl.textContent = score;
 
-        // Check for Collision between Player and Target
-        function checkCollision() {
-            const playerPosition = playerMarker.getLatLng();
-            const targetPosition = target.getLatLng();
-
-            const distance = map.distance(playerPosition, targetPosition);
-            if (distance < 20) { // Collision threshold in meters
-                alert('You reached the target!');
-
-                // Remove the old target
-                map.removeLayer(target);
-
-                // Place a new target at a random location within bounds
-                const newLat = playerPosition.lat + (Math.random() - 0.5) * 0.02;
-                const newLng = playerPosition.lng + (Math.random() - 0.5) * 0.02;
-                target = addTarget(newLat, newLng);
+            if (lastMarker) {
+                map.removeLayer(lastMarker);
             }
+            lastMarker = L.marker(targetLatLng).addTo(map)
+                .bindPopup(`${targetCountry.name}<br>Distance: ${distanceKm.toFixed(1)} km<br>Round score: ${roundScore}`)
+                .openPopup();
+
+            setTimeout(nextRound, 1500);
         }
     </script>
 </body>
