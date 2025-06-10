@@ -13,9 +13,28 @@
             background: #f0f0f0;
         }
         #question { font-size: 1.2em; margin-bottom: 5px; }
+        #startScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255,255,255,0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        #startScreen.hidden { display: none; }
     </style>
 </head>
 <body>
+    <div id="startScreen">
+        <h1>World Map Quiz</h1>
+        <p>Find the asked country on the map. The closer you click to the right location, the more points you get.</p>
+        <button id="startGameButton">Start Game</button>
+    </div>
     <div id="info">
         <div id="question">Click start to begin!</div>
         <div>Score: <span id="score">0</span></div>
@@ -24,6 +43,7 @@
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script>
         const map = L.map('map').setView([20, 0], 2);
 
@@ -50,10 +70,28 @@
         const totalRounds = 5;
         let targetCountry = null;
         let lastMarker = null;
+        const countryShapes = {};
+
+        fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json')
+            .then(r => r.json())
+            .then(data => {
+                data.features.forEach(f => {
+                    let n = f.properties.name;
+                    if (n === 'United States of America') n = 'United States';
+                    if (countries.some(c => c.name === n)) {
+                        countryShapes[n] = f;
+                    }
+                });
+            });
 
         const scoreEl = document.getElementById('score');
         const questionEl = document.getElementById('question');
         document.getElementById('startButton').addEventListener('click', startGame);
+        const startScreen = document.getElementById('startScreen');
+        document.getElementById('startGameButton').addEventListener('click', () => {
+            startScreen.classList.add('hidden');
+            startGame();
+        });
 
         function startGame() {
             score = 0;
@@ -80,7 +118,16 @@
         function handleGuess(e) {
             const guessLatLng = e.latlng;
             const targetLatLng = L.latLng(targetCountry.lat, targetCountry.lng);
-            const distanceKm = map.distance(guessLatLng, targetLatLng) / 1000;
+            let distanceKm = map.distance(guessLatLng, targetLatLng) / 1000;
+
+            const feature = countryShapes[targetCountry.name];
+            if (feature) {
+                const pt = turf.point([guessLatLng.lng, guessLatLng.lat]);
+                if (turf.booleanPointInPolygon(pt, feature)) {
+                    distanceKm = 0;
+                }
+            }
+
             const roundScore = Math.max(0, Math.round(1000 - distanceKm));
             score += roundScore;
             scoreEl.textContent = score;
