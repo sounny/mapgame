@@ -94,7 +94,7 @@
       const totalRounds = 5;
       let targetCountry = null;
       let lastMarker = null;
-      let lastShape = null;
+      const shapes = [];
       const countryShapes = {};
 
       fetch(
@@ -136,10 +136,8 @@
           map.removeLayer(lastMarker);
           lastMarker = null;
         }
-        if (lastShape) {
-          map.removeLayer(lastShape);
-          lastShape = null;
-        }
+        shapes.forEach((s) => map.removeLayer(s));
+        shapes.length = 0;
         nextRound();
       }
 
@@ -177,10 +175,6 @@
         if (lastMarker) {
           map.removeLayer(lastMarker);
         }
-        if (lastShape) {
-          map.removeLayer(lastShape);
-          lastShape = null;
-        }
         lastMarker = L.marker(targetLatLng)
           .addTo(map)
           .bindPopup(
@@ -189,7 +183,7 @@
           .openPopup();
 
         if (feature) {
-          lastShape = L.geoJSON(feature, {
+          const shape = L.geoJSON(feature, {
             style: {
               color: isCorrect ? "green" : "red",
               weight: 2,
@@ -197,6 +191,7 @@
               fillOpacity: 0.3,
             },
           }).addTo(map);
+          shapes.push(shape);
         }
 
         roundResults.push({
