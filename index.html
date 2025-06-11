@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>World Map Quiz</title>
+    <title>Sounny's Map Game</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
       body {
@@ -54,7 +54,7 @@
   </head>
   <body>
     <div id="startScreen">
-      <h1>World Map Quiz</h1>
+      <h1>Sounny's Map Game</h1>
       <p>
         Find the asked country on the map. The closer you click to the right
         location, the more points you get.
@@ -228,10 +228,10 @@
         .addEventListener("click", startGame);
 
       document.getElementById("shareButton").addEventListener("click", () => {
-        const text = `I scored ${score} points in the World Map Quiz!`;
+        const text = `I scored ${score} points in Sounny's Map Game!`;
         if (navigator.share) {
           navigator.share({
-            title: "World Map Quiz",
+            title: "Sounny's Map Game",
             text,
             url: window.location.href,
           });
