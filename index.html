@@ -11,6 +11,7 @@
       }
       #map {
         height: calc(100vh - 80px);
+        background: #e0e0e0;
       }
       #info {
         padding: 10px;
@@ -80,10 +81,8 @@
     <script>
       const map = L.map("map").setView([20, 0], 2);
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 5,
-        attribution: "© OpenStreetMap",
-      }).addTo(map);
+      // Show world borders as the base map
+      let borderLayer;
 
       let countries = [];
       let remainingCountries = [];
@@ -109,6 +108,9 @@
             const c = turf.centroid(f).geometry.coordinates;
             return { name: n, lat: c[1], lng: c[0] };
           });
+          borderLayer = L.geoJSON(data, {
+            style: { color: "#555", weight: 1, fillOpacity: 0 },
+          }).addTo(map);
         });
 
       const scoreEl = document.getElementById("score");
