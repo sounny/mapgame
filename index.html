@@ -1,146 +1,244 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>World Map Quiz</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
-        body { margin: 0; }
-        #map { height: calc(100vh - 80px); }
-        #info {
-            padding: 10px;
-            background: #f0f0f0;
-        }
-        #question { font-size: 1.2em; margin-bottom: 5px; }
-        #startScreen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(255,255,255,0.9);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-        }
-        #startScreen.hidden { display: none; }
+      body {
+        margin: 0;
+      }
+      #map {
+        height: calc(100vh - 80px);
+      }
+      #info {
+        padding: 10px;
+        background: #f0f0f0;
+      }
+      #question {
+        font-size: 1.2em;
+        margin-bottom: 5px;
+      }
+      #startScreen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.9);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+      }
+      #startScreen.hidden,
+      #endScreen.hidden {
+        display: none;
+      }
+      #endScreen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.9);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <div id="startScreen">
-        <h1>World Map Quiz</h1>
-        <p>Find the asked country on the map. The closer you click to the right location, the more points you get.</p>
-        <button id="startGameButton">Start Game</button>
+      <h1>World Map Quiz</h1>
+      <p>
+        Find the asked country on the map. The closer you click to the right
+        location, the more points you get.
+      </p>
+      <button id="startGameButton">Start Game</button>
+    </div>
+    <div id="endScreen" class="hidden">
+      <h1>Game Over</h1>
+      <div id="finalScore"></div>
+      <ul id="resultsList"></ul>
+      <button id="shareButton">Share Score</button>
+      <button id="restartButton">Play Again</button>
     </div>
     <div id="info">
-        <div id="question">Click start to begin!</div>
-        <div>Score: <span id="score">0</span></div>
-        <button id="startButton">Start Game</button>
+      <div id="question">Click start to begin!</div>
+      <div>Score: <span id="score">0</span></div>
+      <button id="startButton">Start Game</button>
     </div>
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script>
-        const map = L.map('map').setView([20, 0], 2);
+      const map = L.map("map").setView([20, 0], 2);
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 5,
-            attribution: '© OpenStreetMap'
-        }).addTo(map);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 5,
+        attribution: "© OpenStreetMap",
+      }).addTo(map);
 
-        const countries = [
-            { name: 'United States', lat: 38.9, lng: -77.0 },
-            { name: 'Brazil', lat: -15.78, lng: -47.93 },
-            { name: 'France', lat: 48.85, lng: 2.35 },
-            { name: 'India', lat: 28.61, lng: 77.21 },
-            { name: 'Japan', lat: 35.68, lng: 139.69 },
-            { name: 'Australia', lat: -35.28, lng: 149.13 },
-            { name: 'South Africa', lat: -25.73, lng: 28.18 },
-            { name: 'Canada', lat: 45.42, lng: -75.69 },
-            { name: 'Russia', lat: 55.75, lng: 37.62 },
-            { name: 'Egypt', lat: 30.04, lng: 31.24 }
-        ];
+      let countries = [];
+      let remainingCountries = [];
+      let roundResults = [];
 
-        let score = 0;
-        let round = 0;
-        const totalRounds = 5;
-        let targetCountry = null;
-        let lastMarker = null;
-        const countryShapes = {};
+      let score = 0;
+      let round = 0;
+      const totalRounds = 5;
+      let targetCountry = null;
+      let lastMarker = null;
+      let lastShape = null;
+      const countryShapes = {};
 
-        fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json')
-            .then(r => r.json())
-            .then(data => {
-                data.features.forEach(f => {
-                    let n = f.properties.name;
-                    if (n === 'United States of America') n = 'United States';
-                    if (countries.some(c => c.name === n)) {
-                        countryShapes[n] = f;
-                    }
-                });
-            });
-
-        const scoreEl = document.getElementById('score');
-        const questionEl = document.getElementById('question');
-        document.getElementById('startButton').addEventListener('click', startGame);
-        const startScreen = document.getElementById('startScreen');
-        document.getElementById('startGameButton').addEventListener('click', () => {
-            startScreen.classList.add('hidden');
-            startGame();
+      fetch(
+        "https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json",
+      )
+        .then((r) => r.json())
+        .then((data) => {
+          countries = data.features.map((f) => {
+            let n = f.properties.name;
+            if (n === "United States of America") n = "United States";
+            countryShapes[n] = f;
+            const c = turf.centroid(f).geometry.coordinates;
+            return { name: n, lat: c[1], lng: c[0] };
+          });
         });
 
-        function startGame() {
-            score = 0;
-            round = 0;
-            scoreEl.textContent = score;
-            if (lastMarker) {
-                map.removeLayer(lastMarker);
-                lastMarker = null;
-            }
-            nextRound();
+      const scoreEl = document.getElementById("score");
+      const questionEl = document.getElementById("question");
+      document
+        .getElementById("startButton")
+        .addEventListener("click", startGame);
+      const startScreen = document.getElementById("startScreen");
+      document
+        .getElementById("startGameButton")
+        .addEventListener("click", () => {
+          startScreen.classList.add("hidden");
+          startGame();
+        });
+
+      function startGame() {
+        score = 0;
+        round = 0;
+        roundResults = [];
+        remainingCountries = [...countries];
+        scoreEl.textContent = score;
+        startScreen.classList.add("hidden");
+        document.getElementById("endScreen").classList.add("hidden");
+        if (lastMarker) {
+          map.removeLayer(lastMarker);
+          lastMarker = null;
+        }
+        if (lastShape) {
+          map.removeLayer(lastShape);
+          lastShape = null;
+        }
+        nextRound();
+      }
+
+      function nextRound() {
+        if (round >= totalRounds || remainingCountries.length === 0) {
+          showEndScreen();
+          return;
+        }
+        const idx = Math.floor(Math.random() * remainingCountries.length);
+        targetCountry = remainingCountries.splice(idx, 1)[0];
+        questionEl.textContent = `Where is ${targetCountry.name}? Click on the map!`;
+        round++;
+        map.once("click", handleGuess);
+      }
+
+      function handleGuess(e) {
+        const guessLatLng = e.latlng;
+        const targetLatLng = L.latLng(targetCountry.lat, targetCountry.lng);
+        let distanceKm = map.distance(guessLatLng, targetLatLng) / 1000;
+
+        const feature = countryShapes[targetCountry.name];
+        let isCorrect = false;
+        if (feature) {
+          const pt = turf.point([guessLatLng.lng, guessLatLng.lat]);
+          if (turf.booleanPointInPolygon(pt, feature)) {
+            distanceKm = 0;
+            isCorrect = true;
+          }
         }
 
-        function nextRound() {
-            if (round >= totalRounds) {
-                questionEl.textContent = `Game over! Final score: ${score}`;
-                return;
-            }
-            targetCountry = countries[Math.floor(Math.random() * countries.length)];
-            questionEl.textContent = `Where is ${targetCountry.name}? Click on the map!`;
-            round++;
-            map.once('click', handleGuess);
+        const roundScore = Math.max(0, Math.round(1000 - distanceKm));
+        score += roundScore;
+        scoreEl.textContent = score;
+
+        if (lastMarker) {
+          map.removeLayer(lastMarker);
+        }
+        if (lastShape) {
+          map.removeLayer(lastShape);
+          lastShape = null;
+        }
+        lastMarker = L.marker(targetLatLng)
+          .addTo(map)
+          .bindPopup(
+            `${targetCountry.name}<br>Distance: ${distanceKm.toFixed(1)} km<br>Round score: ${roundScore}`,
+          )
+          .openPopup();
+
+        if (feature) {
+          lastShape = L.geoJSON(feature, {
+            style: {
+              color: isCorrect ? "green" : "red",
+              weight: 2,
+              fillColor: isCorrect ? "green" : "red",
+              fillOpacity: 0.3,
+            },
+          }).addTo(map);
         }
 
-        function handleGuess(e) {
-            const guessLatLng = e.latlng;
-            const targetLatLng = L.latLng(targetCountry.lat, targetCountry.lng);
-            let distanceKm = map.distance(guessLatLng, targetLatLng) / 1000;
+        roundResults.push({
+          country: targetCountry.name,
+          correct: isCorrect,
+          roundScore,
+        });
 
-            const feature = countryShapes[targetCountry.name];
-            if (feature) {
-                const pt = turf.point([guessLatLng.lng, guessLatLng.lat]);
-                if (turf.booleanPointInPolygon(pt, feature)) {
-                    distanceKm = 0;
-                }
-            }
+        setTimeout(nextRound, 1500);
+      }
 
-            const roundScore = Math.max(0, Math.round(1000 - distanceKm));
-            score += roundScore;
-            scoreEl.textContent = score;
+      function showEndScreen() {
+        questionEl.textContent = "Game over!";
+        const endScreen = document.getElementById("endScreen");
+        document.getElementById("finalScore").textContent =
+          `Final score: ${score}`;
+        const list = document.getElementById("resultsList");
+        list.innerHTML = "";
+        roundResults.forEach((r, i) => {
+          const li = document.createElement("li");
+          li.textContent = `Round ${i + 1}: ${r.country} - ${r.correct ? "Correct" : "Wrong"} (${r.roundScore} pts)`;
+          list.appendChild(li);
+        });
+        endScreen.classList.remove("hidden");
+      }
 
-            if (lastMarker) {
-                map.removeLayer(lastMarker);
-            }
-            lastMarker = L.marker(targetLatLng).addTo(map)
-                .bindPopup(`${targetCountry.name}<br>Distance: ${distanceKm.toFixed(1)} km<br>Round score: ${roundScore}`)
-                .openPopup();
+      document
+        .getElementById("restartButton")
+        .addEventListener("click", startGame);
 
-            setTimeout(nextRound, 1500);
+      document.getElementById("shareButton").addEventListener("click", () => {
+        const text = `I scored ${score} points in the World Map Quiz!`;
+        if (navigator.share) {
+          navigator.share({
+            title: "World Map Quiz",
+            text,
+            url: window.location.href,
+          });
+        } else {
+          prompt("Copy this text and share:", text);
         }
+      });
     </script>
-</body>
+  </body>
 </html>
