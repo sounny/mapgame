@@ -106,9 +106,8 @@
       const shapes = [];
       const countryShapes = {};
 
-      fetch(
-        "https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json",
-      )
+      // Load the high resolution country polygons shipped with the project
+      fetch("countries.geo.json")
         .then((r) => r.json())
         .then((data) => {
           countries = data.features.map((f) => {
