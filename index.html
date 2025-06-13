@@ -79,9 +79,8 @@
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script>
-      const map = L.map("map").setView([20, 0], 2);
-
-      const basemap = L.tileLayer(
+      // Basemap layers using provider URLs from Leaflet-providers
+      var CartoDB_PositronNoLabels = L.tileLayer(
         "https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
         {
           attribution:
@@ -89,10 +88,23 @@
           subdomains: "abcd",
           maxZoom: 20,
         },
-      ).addTo(map);
+      );
+      var Stadia_StamenTonerLines = L.tileLayer(
+        "https://tiles.stadiamaps.com/tiles/stamen_toner_lines/{z}/{x}/{y}{r}.{ext}",
+        {
+          minZoom: 0,
+          maxZoom: 20,
+          attribution:
+            '&copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a> &copy; <a href="https://www.stamen.com/" target="_blank">Stamen Design</a> &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          ext: "png",
+        },
+      );
 
-      // Show world borders on top of the basemap
-      let borderLayer;
+      const map = L.map("map", {
+        layers: [CartoDB_PositronNoLabels, Stadia_StamenTonerLines],
+      }).setView([20, 0], 2);
+
+      // GeoJSON data for country polygons
 
       let countries = [];
       let remainingCountries = [];
@@ -117,9 +129,8 @@
             const c = turf.centroid(f).geometry.coordinates;
             return { name: n, lat: c[1], lng: c[0] };
           });
-          borderLayer = L.geoJSON(data, {
-            style: { color: "#555", weight: 1, fillOpacity: 0 },
-          }).addTo(map);
+          // Do not display the world borders so only
+          // the guessed country's border is shown later
         });
 
       const scoreEl = document.getElementById("score");
