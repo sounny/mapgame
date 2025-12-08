@@ -6,4 +6,5 @@
 - Example: `- 2023-12-31: Added new dataset - AB`
 
 ## ChangeLog
+- 2024-06-17: Improved map game UI with loading guard and feedback - AS
 
