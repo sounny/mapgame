@@ -8,19 +8,31 @@
     <style>
       body {
         margin: 0;
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
         background: linear-gradient(to bottom right, #fff0e0, #ffe0e0);
+        color: #1f2937;
       }
       #map {
-        height: calc(100vh - 80px);
+        height: calc(100vh - 120px);
         background: #e0e0e0;
       }
       #info {
-        padding: 10px;
-        background: #f0f0f0;
+        padding: 12px 16px;
+        background: rgba(255, 255, 255, 0.9);
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
       }
       #question {
         font-size: 1.2em;
-        margin-bottom: 5px;
+        margin-bottom: 6px;
+        font-weight: 700;
+      }
+      #status {
+        margin: 0;
+        font-size: 0.95em;
       }
       #startScreen {
         position: fixed;
@@ -28,11 +40,14 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(255, 255, 255, 0.9);
+        background: rgba(255, 255, 255, 0.94);
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
+        gap: 12px;
+        text-align: center;
+        padding: 24px;
         z-index: 1000;
       }
       #startScreen.hidden,
@@ -45,12 +60,53 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(255, 255, 255, 0.9);
+        background: rgba(255, 255, 255, 0.94);
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
+        gap: 12px;
+        text-align: center;
+        padding: 24px;
         z-index: 1000;
+      }
+      .button-row {
+        display: flex;
+        gap: 10px;
+      }
+      button {
+        background-color: #2563eb;
+        color: white;
+        border: none;
+        padding: 10px 16px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+      }
+      button[disabled] {
+        background: #c7d2fe;
+        cursor: not-allowed;
+        color: #4b5563;
+        box-shadow: none;
+      }
+      #roundInfo,
+      #scoreWrapper {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      #roundInfo strong,
+      #scoreWrapper strong {
+        font-size: 0.85em;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        color: #6b7280;
+      }
+      #resultsList {
+        text-align: left;
+        max-width: 480px;
+        padding: 0 16px;
       }
     </style>
   </head>
@@ -59,9 +115,11 @@
       <h1>Sounny's Map Game</h1>
       <p>
         Find the asked country on the map. The closer you click to the right
-        location, the more points you get.
+        location, the more points you get. Five quick rounds, instant feedback.
       </p>
-      <button id="startGameButton">Start Game</button>
+      <div class="button-row">
+        <button id="startGameButton" disabled>Loading countries...</button>
+      </div>
     </div>
     <div id="endScreen" class="hidden">
       <h1>Game Over</h1>
@@ -71,8 +129,18 @@
       <button id="restartButton">Play Again</button>
     </div>
     <div id="info">
-      <div id="question">Click start to begin!</div>
-      <div>Score: <span id="score">0</span></div>
+      <div>
+        <div id="question">Click start to begin!</div>
+        <p id="status">You'll get a country prompt once the map is ready.</p>
+      </div>
+      <div id="roundInfo">
+        <strong>Round</strong>
+        <div><span id="roundCurrent">0</span> / <span id="roundTotal">5</span></div>
+      </div>
+      <div id="scoreWrapper">
+        <strong>Score</strong>
+        <div><span id="score">0</span> pts</div>
+      </div>
       <button id="startButton">Start Game</button>
     </div>
     <div id="map"></div>
@@ -103,6 +171,7 @@
 
       const map = L.map("map", {
         layers: [CartoDB_PositronNoLabels, Stamen_TonerLines],
+        worldCopyJump: true,
       }).setView([20, 0], 2);
 
       // GeoJSON data for country polygons
@@ -118,6 +187,7 @@
       let lastMarker = null;
       const shapes = [];
       const countryShapes = {};
+      let dataReady = false;
 
       // Load the high resolution country polygons shipped with the project
       fetch("countries.geo.json")
@@ -132,10 +202,18 @@
           });
           // Do not display the world borders so only
           // the guessed country's border is shown later
+          dataReady = true;
+          updateLoadingState();
+        })
+        .catch(() => {
+          setStatus("Unable to load countries. Please refresh and try again.");
         });
 
       const scoreEl = document.getElementById("score");
       const questionEl = document.getElementById("question");
+      const statusEl = document.getElementById("status");
+      const roundCurrentEl = document.getElementById("roundCurrent");
+      const roundTotalEl = document.getElementById("roundTotal");
       document
         .getElementById("startButton")
         .addEventListener("click", startGame);
@@ -146,8 +224,14 @@
           startScreen.classList.add("hidden");
           startGame();
         });
+      roundTotalEl.textContent = totalRounds;
 
       function startGame() {
+        if (!dataReady) {
+          setStatus("Still loading country data. Please wait...");
+          return;
+        }
+        setStatus("Click on the country you think matches the prompt.");
         score = 0;
         round = 0;
         roundResults = [];
@@ -161,6 +245,7 @@
         }
         shapes.forEach((s) => map.removeLayer(s));
         shapes.length = 0;
+        roundCurrentEl.textContent = round;
         nextRound();
       }
 
@@ -172,7 +257,9 @@
         const idx = Math.floor(Math.random() * remainingCountries.length);
         targetCountry = remainingCountries.splice(idx, 1)[0];
         questionEl.textContent = `Where is ${targetCountry.name}? Click on the map!`;
+        setStatus("Single-click the map to lock in your answer.");
         round++;
+        roundCurrentEl.textContent = round;
         map.once("click", handleGuess);
       }
 
@@ -223,11 +310,18 @@
           roundScore,
         });
 
+        setStatus(
+          isCorrect
+            ? `Correct! ${targetCountry.name} is right here. +${roundScore} pts`
+            : `Off by ${distanceKm.toFixed(1)} km. +${roundScore} pts. Keep going!`,
+        );
+
         setTimeout(nextRound, 1500);
       }
 
       function showEndScreen() {
         questionEl.textContent = "Game over!";
+        setStatus("See your round-by-round results and play again.");
         const endScreen = document.getElementById("endScreen");
         document.getElementById("finalScore").textContent =
           `Final score: ${score}`;
@@ -244,6 +338,26 @@
       document
         .getElementById("restartButton")
         .addEventListener("click", startGame);
+
+      function updateLoadingState() {
+        const buttons = [
+          document.getElementById("startButton"),
+          document.getElementById("startGameButton"),
+        ];
+        buttons.forEach((btn) => {
+          btn.disabled = !dataReady;
+          btn.textContent = dataReady ? "Start Game" : "Loading countries...";
+        });
+        if (!dataReady) {
+          setStatus("Loading detailed country boundaries...");
+        }
+      }
+
+      function setStatus(text) {
+        statusEl.textContent = text;
+      }
+
+      updateLoadingState();
 
       document.getElementById("shareButton").addEventListener("click", () => {
         const text = `I scored ${score} points in Sounny's Map Game!`;
