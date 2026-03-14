@@ -7,4 +7,4 @@
 
 ## ChangeLog
 - 2024-06-17: Improved map game UI with loading guard and feedback - AS
-
+- 2026-02-08: Added difficulty modes, round timer, and bonus scoring for better gameplay flow - GPT
