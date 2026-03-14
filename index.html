@@ -108,6 +108,39 @@
         max-width: 480px;
         padding: 0 16px;
       }
+      #controls {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin-left: auto;
+      }
+      #controls select {
+        border-radius: 6px;
+        border: 1px solid #cbd5e1;
+        padding: 6px 8px;
+        font-weight: 600;
+      }
+      #timerWrapper {
+        min-width: 120px;
+      }
+      #timerBar {
+        width: 100%;
+        height: 8px;
+        background: #e5e7eb;
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      #timerFill {
+        height: 100%;
+        width: 100%;
+        background: linear-gradient(to right, #22c55e, #eab308, #ef4444);
+        transition: width 0.15s linear;
+      }
+      .hint {
+        margin: 0;
+        color: #64748b;
+        font-size: 0.85em;
+      }
     </style>
   </head>
   <body>
@@ -118,8 +151,14 @@
         location, the more points you get. Five quick rounds, instant feedback.
       </p>
       <div class="button-row">
+        <select id="difficultyStart">
+          <option value="easy">Easy (60s, 5 rounds)</option>
+          <option value="normal" selected>Normal (35s, 7 rounds)</option>
+          <option value="hard">Hard (20s, 10 rounds)</option>
+        </select>
         <button id="startGameButton" disabled>Loading countries...</button>
       </div>
+      <p class="hint">Build streaks for bonus points. Fast answers score more.</p>
     </div>
     <div id="endScreen" class="hidden">
       <h1>Game Over</h1>
@@ -140,6 +179,19 @@
       <div id="scoreWrapper">
         <strong>Score</strong>
         <div><span id="score">0</span> pts</div>
+      </div>
+      <div id="timerWrapper">
+        <strong>Timer</strong>
+        <div id="timerBar"><div id="timerFill"></div></div>
+        <div><span id="timeLeft">--</span>s left</div>
+      </div>
+      <div id="controls">
+        <strong>Difficulty</strong>
+        <select id="difficultyInline">
+          <option value="easy">Easy</option>
+          <option value="normal" selected>Normal</option>
+          <option value="hard">Hard</option>
+        </select>
       </div>
       <button id="startButton">Start Game</button>
     </div>
@@ -181,13 +233,24 @@
       let roundResults = [];
 
       let score = 0;
+      let streak = 0;
       let round = 0;
-      const totalRounds = 5;
+      let totalRounds = 7;
       let targetCountry = null;
       let lastMarker = null;
+      let roundTimer = null;
+      let timerTicker = null;
+      let roundDeadlineMs = 0;
+      let roundTimeLimitSec = 35;
+      let waitingForGuess = false;
       const shapes = [];
       const countryShapes = {};
       let dataReady = false;
+      const difficultySettings = {
+        easy: { rounds: 5, timeLimitSec: 60 },
+        normal: { rounds: 7, timeLimitSec: 35 },
+        hard: { rounds: 10, timeLimitSec: 20 },
+      };
 
       // Load the high resolution country polygons shipped with the project
       fetch("countries.geo.json")
@@ -214,6 +277,11 @@
       const statusEl = document.getElementById("status");
       const roundCurrentEl = document.getElementById("roundCurrent");
       const roundTotalEl = document.getElementById("roundTotal");
+      const timeLeftEl = document.getElementById("timeLeft");
+      const timerFillEl = document.getElementById("timerFill");
+      const difficultyStartEl = document.getElementById("difficultyStart");
+      const difficultyInlineEl = document.getElementById("difficultyInline");
+      const questionDefault = "Click start to begin!";
       document
         .getElementById("startButton")
         .addEventListener("click", startGame);
@@ -224,6 +292,16 @@
           startScreen.classList.add("hidden");
           startGame();
         });
+
+      difficultyStartEl.addEventListener("change", syncDifficultySelects);
+      difficultyInlineEl.addEventListener("change", syncDifficultySelects);
+
+      function syncDifficultySelects(e) {
+        const value = e.target.value;
+        difficultyStartEl.value = value;
+        difficultyInlineEl.value = value;
+      }
+
       roundTotalEl.textContent = totalRounds;
 
       function startGame() {
@@ -231,8 +309,15 @@
           setStatus("Still loading country data. Please wait...");
           return;
         }
+        const mode = difficultyStartEl.value;
+        const setting = difficultySettings[mode] || difficultySettings.normal;
+        totalRounds = setting.rounds;
+        roundTimeLimitSec = setting.timeLimitSec;
+        roundTotalEl.textContent = totalRounds;
+        questionEl.textContent = questionDefault;
         setStatus("Click on the country you think matches the prompt.");
         score = 0;
+        streak = 0;
         round = 0;
         roundResults = [];
         remainingCountries = [...countries];
@@ -243,9 +328,12 @@
           map.removeLayer(lastMarker);
           lastMarker = null;
         }
+        stopRoundTimer();
         shapes.forEach((s) => map.removeLayer(s));
         shapes.length = 0;
         roundCurrentEl.textContent = round;
+        timeLeftEl.textContent = roundTimeLimitSec;
+        timerFillEl.style.width = "100%";
         nextRound();
       }
 
@@ -257,13 +345,22 @@
         const idx = Math.floor(Math.random() * remainingCountries.length);
         targetCountry = remainingCountries.splice(idx, 1)[0];
         questionEl.textContent = `Where is ${targetCountry.name}? Click on the map!`;
-        setStatus("Single-click the map to lock in your answer.");
+        setStatus(
+          `Single-click to lock your answer. Streak bonus: +100 per consecutive correct guess (current streak ${streak}).`,
+        );
         round++;
         roundCurrentEl.textContent = round;
+        waitingForGuess = true;
+        startRoundTimer();
         map.once("click", handleGuess);
       }
 
       function handleGuess(e) {
+        if (!waitingForGuess) {
+          return;
+        }
+        waitingForGuess = false;
+        stopRoundTimer();
         const guessLatLng = e.latlng;
         const targetLatLng = L.latLng(targetCountry.lat, targetCountry.lng);
         let distanceKm = map.distance(guessLatLng, targetLatLng) / 1000;
@@ -278,7 +375,14 @@
           }
         }
 
-        const roundScore = Math.max(0, Math.round(1000 - distanceKm));
+        const timeSpentSec = Math.max(
+          0,
+          roundTimeLimitSec - Math.max(0, Math.ceil((roundDeadlineMs - Date.now()) / 1000)),
+        );
+        const speedBonus = Math.max(0, Math.round((roundTimeLimitSec - timeSpentSec) * 8));
+        const streakBonus = isCorrect ? streak * 100 : 0;
+        const roundScore = Math.max(0, Math.round(1000 - distanceKm)) + speedBonus + streakBonus;
+        streak = isCorrect ? streak + 1 : 0;
         score += roundScore;
         scoreEl.textContent = score;
 
@@ -308,18 +412,89 @@
           country: targetCountry.name,
           correct: isCorrect,
           roundScore,
+          speedBonus,
+          streakBonus,
         });
 
         setStatus(
           isCorrect
-            ? `Correct! ${targetCountry.name} is right here. +${roundScore} pts`
-            : `Off by ${distanceKm.toFixed(1)} km. +${roundScore} pts. Keep going!`,
+            ? `Correct! +${roundScore} pts (${speedBonus} speed + ${streakBonus} streak bonus).`
+            : `Off by ${distanceKm.toFixed(1)} km. +${roundScore} pts (${speedBonus} speed bonus).`,
         );
 
         setTimeout(nextRound, 1500);
       }
 
+      function handleTimeout() {
+        if (!waitingForGuess) {
+          return;
+        }
+        waitingForGuess = false;
+        stopRoundTimer();
+        streak = 0;
+        roundResults.push({
+          country: targetCountry.name,
+          correct: false,
+          roundScore: 0,
+          speedBonus: 0,
+          streakBonus: 0,
+        });
+        setStatus(`Time's up! ${targetCountry.name} was the target. 0 pts this round.`);
+        if (lastMarker) {
+          map.removeLayer(lastMarker);
+        }
+        const targetLatLng = L.latLng(targetCountry.lat, targetCountry.lng);
+        lastMarker = L.marker(targetLatLng)
+          .addTo(map)
+          .bindPopup(`${targetCountry.name}<br>Time expired`)
+          .openPopup();
+        const feature = countryShapes[targetCountry.name];
+        if (feature) {
+          const shape = L.geoJSON(feature, {
+            style: {
+              color: "#ef4444",
+              weight: 2,
+              fillColor: "#ef4444",
+              fillOpacity: 0.25,
+            },
+          }).addTo(map);
+          shapes.push(shape);
+        }
+        setTimeout(nextRound, 1500);
+      }
+
+      function startRoundTimer() {
+        stopRoundTimer();
+        roundDeadlineMs = Date.now() + roundTimeLimitSec * 1000;
+        timeLeftEl.textContent = roundTimeLimitSec;
+        timerFillEl.style.width = "100%";
+
+        roundTimer = setTimeout(handleTimeout, roundTimeLimitSec * 1000);
+        timerTicker = setInterval(() => {
+          const remainingMs = Math.max(0, roundDeadlineMs - Date.now());
+          const remainingSec = Math.ceil(remainingMs / 1000);
+          const pct = Math.max(0, (remainingMs / (roundTimeLimitSec * 1000)) * 100);
+          timeLeftEl.textContent = remainingSec;
+          timerFillEl.style.width = `${pct}%`;
+          if (remainingMs <= 0) {
+            stopRoundTimer();
+          }
+        }, 150);
+      }
+
+      function stopRoundTimer() {
+        if (roundTimer) {
+          clearTimeout(roundTimer);
+          roundTimer = null;
+        }
+        if (timerTicker) {
+          clearInterval(timerTicker);
+          timerTicker = null;
+        }
+      }
+
       function showEndScreen() {
+        stopRoundTimer();
         questionEl.textContent = "Game over!";
         setStatus("See your round-by-round results and play again.");
         const endScreen = document.getElementById("endScreen");
@@ -329,7 +504,7 @@
         list.innerHTML = "";
         roundResults.forEach((r, i) => {
           const li = document.createElement("li");
-          li.textContent = `Round ${i + 1}: ${r.country} - ${r.correct ? "Correct" : "Wrong"} (${r.roundScore} pts)`;
+          li.textContent = `Round ${i + 1}: ${r.country} - ${r.correct ? "Correct" : "Wrong"} (${r.roundScore} pts, speed +${r.speedBonus}, streak +${r.streakBonus})`;
           list.appendChild(li);
         });
         endScreen.classList.remove("hidden");
